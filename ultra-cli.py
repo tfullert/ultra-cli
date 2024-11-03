@@ -318,6 +318,7 @@ def records(zone, export, owner):
 # Command for generating reports for the UltraDNS account
 @cli.group('report')
 def report():
+    # Will need to update ultradns module first
     click.echo('report')
     
 # -----------------------------------------------------------------------------
