@@ -190,6 +190,8 @@ def cli(username, password, verbose, token):
     logger.debug(f"username is: {client_username}")
     logger.debug(f"client_token is: {client_token}")
 
+    authenticateClient()
+
 # -----------------------------------------------------------------------------
 # Command for listing aspects of an UltraDNS account
 #
@@ -199,6 +201,16 @@ def cli(username, password, verbose, token):
 @cli.group('ls')
 def ls():
     logger.debug("Executing ls (list) command.")
+
+# -----------------------------------------------------------------------------
+# Command for creating new objects in the UltraDNS account
+#
+# Sub-commands:
+# - zones
+# - records
+@cli.group('create')
+def create():
+    logger.debug("Executing create command.")
 
 # -----------------------------------------------------------------------------
 # Sub-command for listing zones of an UltraDNS account
@@ -228,7 +240,7 @@ def ls():
 def zones(export, type, name, status):
 
     # Setup authentication of client and parameters for API calls
-    authenticateClient()
+    #authenticateClient()
 
     # Get zones from API and display
     zones   = getZones(name, type, status)
@@ -261,7 +273,7 @@ def zones(export, type, name, status):
               help='Specify the record name to search for.')
 def records(zone, export, owner):
 
-    authenticateClient()
+    #authenticateClient()
 
     query       = {}
     records     = {}
@@ -313,6 +325,32 @@ def records(zone, export, owner):
     print(records_df.to_string(index=False))
 
     exportToFile(export, records_df)
+
+# -----------------------------------------------------------------------------
+# Sub-command for creating zones in an UltraDNS account
+#
+# Options: 
+# -t, --type filters on type of zone (ALIAS, PRIMARY, SECONDARY)
+# -n, --name filters on the name of zone (allowing for partial string matches)
+@create.command("zone")
+@click.option('-t', '--type', 
+              required=True, 
+              type=click.Choice(["ALIAS", "PRIMARY", "SECONDARY"]), 
+              help='Type of zone to create.')
+@click.option('-n', '--name',
+              required=True, 
+              multiple=True,
+              type=str, 
+              help='Name of the zone to create.')
+def create_zone(type, name):
+    logger.debug("In create_zone!")
+    type='PRIMARY'
+    logger.debug(f"TYPE: {type}")
+    for n in name:
+        logger.debug(f"Creating {n}")
+        rsp = client.create_primary_zone('tfullerton', n)
+
+    logger.debug(f"RSP: {rsp}")
 
 # -----------------------------------------------------------------------------
 # Command for generating reports for the UltraDNS account
