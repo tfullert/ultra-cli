@@ -30,6 +30,7 @@ pip install pyinstaller
 pyinstaller -F ultra-cli.py
 
 # Executable will be in dist/ultra-cli
+cp dist/ultra-cli.exe ultra-cli
 ```
 
 ## Usage
