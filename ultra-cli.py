@@ -18,6 +18,10 @@ client_token    = None
 logger          = logging.getLogger(__name__)
 pp              = pprint.PrettyPrinter(indent=4)
 
+# =============================================================================
+# Supporting Functions
+# =============================================================================
+
 # -----------------------------------------------------------------------------
 # NotRequiredIf class is a custom type for click to support mutual exclusivity
 # of token and username/password command line parameters.
@@ -139,6 +143,10 @@ def setEnvironment():
 def unsetEnvironment():
     pass
 
+# =============================================================================
+# Main CLI entry point
+# =============================================================================
+
 # -----------------------------------------------------------------------------
 # Main entry point for CLI.
 #
@@ -192,6 +200,10 @@ def cli(username, password, verbose, token):
 
     authenticateClient()
 
+# =============================================================================
+# List (ls) commands & sub-commands
+# =============================================================================
+
 # -----------------------------------------------------------------------------
 # Command for listing aspects of an UltraDNS account
 #
@@ -203,14 +215,19 @@ def ls():
     logger.debug("Executing ls (list) command.")
 
 # -----------------------------------------------------------------------------
-# Command for creating new objects in the UltraDNS account
-#
-# Sub-commands:
-# - zones
-# - records
-@cli.group('create')
-def create():
-    logger.debug("Executing create command.")
+# Sub-command for listing UltraDNS accounts the user belongs to
+@ls.command("accounts")
+def accounts():
+    global client
+    account_list    = []
+    accounts        = client.get_account_details()
+
+    # Do as a list comprehension
+    for account in accounts['accounts']:
+        account_list.append(account['accountName'])
+
+    accounts_df = pd.DataFrame(account_list, columns=['Account Name'])
+    print(accounts_df.to_string(index=False))
 
 # -----------------------------------------------------------------------------
 # Sub-command for listing zones of an UltraDNS account
@@ -220,7 +237,7 @@ def create():
 # -t, --type filters on type of zone (ALIAS, PRIMARY, SECONDARY)
 # -n, --name filters on the name of zone (allowing for partial string matches)
 # -s, --status filters on status of zone (ACTIVE, SUSPENDED)
-@ls.command()
+@ls.command("zones")
 @click.option('--export', 
               type=click.File('w'),
               help='Export list of zones to the specified file.')
@@ -259,7 +276,7 @@ def zones(export, type, name, status):
 # -o, --owner requires a string that specifies the record name to search for
 #
 # TODO: Support query on record type
-@ls.command()
+@ls.command("records")
 @click.option('--export', 
               type=click.File('w'), 
               help='Export list of records to file (csv).')
@@ -326,6 +343,37 @@ def records(zone, export, owner):
 
     exportToFile(export, records_df)
 
+# =============================================================================
+# Delete commands & sub-commands
+# =============================================================================
+
+@cli.group('delete')
+def delete():
+    # TODO: Test for username/password (no TOKEN) or use --force
+    logger.debug("Executing delete command.")
+
+@delete.command('zones')
+def delete_zones():
+    pass
+
+# =============================================================================
+# Create commands & sub-commands
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Command for creating new objects in the UltraDNS account
+#
+# Sub-commands:
+# - zones
+# - records
+@cli.group('create')
+def create():
+    # TODO: Test for username/password here (no TOKEN access)
+    # or have a --force option
+    logger.debug("Executing create command.")
+
+
+
 # -----------------------------------------------------------------------------
 # Sub-command for creating zones in an UltraDNS account
 #
@@ -337,18 +385,23 @@ def records(zone, export, owner):
               required=True, 
               type=click.Choice(["ALIAS", "PRIMARY", "SECONDARY"]), 
               help='Type of zone to create.')
+@click.option('-a', '--account',
+              required=True,
+              type=str,
+              help='Name of the UltraDNS account to create zone in.')
 @click.option('-n', '--name',
               required=True, 
               multiple=True,
               type=str, 
               help='Name of the zone to create.')
-def create_zone(type, name):
-    logger.debug("In create_zone!")
-    type='PRIMARY'
-    logger.debug(f"TYPE: {type}")
+# TODO: Need to specify other required parameters if secondary zone
+def create_zone(type, account, name):
+
+    logger.debug(f"Create {type} zone {name} in {account} account.")
+
     for n in name:
         logger.debug(f"Creating {n}")
-        rsp = client.create_primary_zone('[accountname]', n)
+        rsp = client.create_primary_zone(account, n)
 
     logger.debug(f"RSP: {rsp}")
 
