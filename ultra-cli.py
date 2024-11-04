@@ -348,7 +348,7 @@ def create_zone(type, name):
     logger.debug(f"TYPE: {type}")
     for n in name:
         logger.debug(f"Creating {n}")
-        rsp = client.create_primary_zone('tfullerton', n)
+        rsp = client.create_primary_zone('[accountname]', n)
 
     logger.debug(f"RSP: {rsp}")
 
