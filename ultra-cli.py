@@ -53,10 +53,10 @@ class NotRequiredIf(click.Option):
 # -----------------------------------------------------------------------------
 # Function for managing the RestApiClient authentication process.
 #
-# NOTE: This process prioritizes username and password to help prevent
-# accidentally changing an account you don't own with an access token.  There
-# are other protections such as confirmation prompts for commands that make
-# changes to an account and read-only tokens.
+# This process prioritizes username and password to help prevent accidentally
+# changing an account you don't own with an access token.  There are other
+# protections such the restrictToken function below that can also prevent these
+# unwanted changes.
 def authenticateClient():
     
     global client
@@ -71,6 +71,16 @@ def authenticateClient():
 
     except AuthError:
         logger.debug("Caught AuthError, exiting!")
+        exit()
+
+# -----------------------------------------------------------------------------
+# The create and delete functions should not be able to use ULTRA_TOKEN for
+# authentication by default.  This is to prevent users from making changes to
+# an account that they don't own.
+def restrictToken():
+
+    if client_token and not client_username and not client_password:
+        click.echo('ULTRA_TOKEN cannot be used with this commands!')
         exit()
 
 # -----------------------------------------------------------------------------
@@ -131,6 +141,13 @@ def exportToFile(export_file, data_to_export):
             data_to_export.to_csv(export_file, index=False, lineterminator='\n')
         except:
             logger.debug(f"could not work with {export_file}!")
+
+# -----------------------------------------------------------------------------
+# Print the DataFrame if it's not empty.
+def printDataFrame(df):
+
+    if not df.empty:
+        print(df.to_string(index=False))
 
 # -----------------------------------------------------------------------------
 # TODO: Create setEnv/unsetEnv functions that allow for setup and teardown of
@@ -218,16 +235,37 @@ def ls():
 # Sub-command for listing UltraDNS accounts the user belongs to
 @ls.command("accounts")
 def accounts():
-    global client
+
     account_list    = []
     accounts        = client.get_account_details()
 
-    # Do as a list comprehension
+    # TODO: Do as a list comprehension
     for account in accounts['accounts']:
         account_list.append(account['accountName'])
 
     accounts_df = pd.DataFrame(account_list, columns=['Account Name'])
-    print(accounts_df.to_string(index=False))
+    printDataFrame(accounts_df)
+    #print(accounts_df.to_string(index=False))
+
+# -----------------------------------------------------------------------------
+# Sub-command for listing tasks assocaited with UltraDNS account
+@ls.command("tasks")
+def tasks():
+    
+    tasks   = []
+    rsp     = client.get_all_tasks()
+    
+    for task in rsp['tasks']:
+        tasks.append({
+            'taskId':       task['taskId'],
+            'status':       task['code'],
+            #'message':      task['message']
+        })
+
+    # TODO: Figure out how to properly display message column data
+    #pd.options.display.max_colwidth = 10
+    task_df = pd.DataFrame(tasks, columns=['taskId', 'status'])
+    print(task_df.to_string(index=False))
 
 # -----------------------------------------------------------------------------
 # Sub-command for listing zones of an UltraDNS account
@@ -256,14 +294,11 @@ def accounts():
               help='Filter on status of zone.')
 def zones(export, type, name, status):
 
-    # Setup authentication of client and parameters for API calls
-    #authenticateClient()
-
     # Get zones from API and display
     zones   = getZones(name, type, status)
     zone_df = pd.DataFrame.from_dict(zones, orient='index')
-    print(zone_df.to_string(index=False))
-
+    
+    printDataFrame(zone_df)
     exportToFile(export, zone_df)
 
 # -----------------------------------------------------------------------------
@@ -289,8 +324,6 @@ def zones(export, type, name, status):
               type=str,
               help='Specify the record name to search for.')
 def records(zone, export, owner):
-
-    #authenticateClient()
 
     query       = {}
     records     = {}
@@ -324,7 +357,6 @@ def records(zone, export, owner):
 
             rrcount = rrcount + rsp['resultInfo']['returnedCount']
             
-
             for record in rsp['rrSets']:
                 records[record['ownerName']] = { 
                     'name':     record['ownerName'],
@@ -339,22 +371,40 @@ def records(zone, export, owner):
             
     # Create DataFrame for display
     records_df = pd.DataFrame.from_dict(records, orient='index')
-    print(records_df.to_string(index=False))
 
+    printDataFrame(records_df)
     exportToFile(export, records_df)
 
 # =============================================================================
 # Delete commands & sub-commands
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# Command for deleting objects of an UltraDNS account
+#
+# Sub-commands:
+# - zones
+# - records 
 @cli.group('delete')
 def delete():
-    # TODO: Test for username/password (no TOKEN) or use --force
+
+    restrictToken()
     logger.debug("Executing delete command.")
 
+# -----------------------------------------------------------------------------
+# Sub-command for deleting zones
+#
+# --name is the name of a zone to delete (you can specify multiple)
 @delete.command('zones')
-def delete_zones():
-    pass
+@click.option('-n', '--name',
+              required=True, 
+              multiple=True,
+              type=str, 
+              help='Name of the zone to delete.')
+def delete_zones(name):
+
+    for n in name:
+        rsp = client.delete_zone(n)
 
 # =============================================================================
 # Create commands & sub-commands
@@ -368,11 +418,9 @@ def delete_zones():
 # - records
 @cli.group('create')
 def create():
-    # TODO: Test for username/password here (no TOKEN access)
-    # or have a --force option
+
+    restrictToken()
     logger.debug("Executing create command.")
-
-
 
 # -----------------------------------------------------------------------------
 # Sub-command for creating zones in an UltraDNS account
@@ -380,10 +428,10 @@ def create():
 # Options: 
 # -t, --type filters on type of zone (ALIAS, PRIMARY, SECONDARY)
 # -n, --name filters on the name of zone (allowing for partial string matches)
-@create.command("zone")
+@create.command("zones")
 @click.option('-t', '--type', 
               required=True, 
-              type=click.Choice(["ALIAS", "PRIMARY", "SECONDARY"]), 
+              type=click.Choice(["PRIMARY", "SECONDARY"]), 
               help='Type of zone to create.')
 @click.option('-a', '--account',
               required=True,
@@ -394,14 +442,45 @@ def create():
               multiple=True,
               type=str, 
               help='Name of the zone to create.')
-# TODO: Need to specify other required parameters if secondary zone
+# TODO: Support primary creation from zone file.
+# TODO: Support verification of user input (ex: IP address)
 def create_zone(type, account, name):
 
     logger.debug(f"Create {type} zone {name} in {account} account.")
 
-    for n in name:
-        logger.debug(f"Creating {n}")
-        rsp = client.create_primary_zone(account, n)
+    primary     = None
+    tsig        = None
+    tsig_key    = None
+
+    if type == 'SECONDARY':
+        primary = click.prompt('Enter primary name server IP', type=str)
+        
+        if click.confirm('Does your primary require TSIG?'):
+            tsig        = click.prompt('Enter TSIG', type=str)
+            tsig_key    = click.prompt('Enter TSIG secret key', type=str)
+
+        for n in name:
+            logger.debug(f"Creating Secondary zone: {n}")
+            rsp = client.create_secondary_zone(account, n, primary, tsig, tsig_key)
+    
+    elif type == 'PRIMARY':
+    
+        if click.confirm('Would you like to load the zone from a primary name server?'):
+            primary = click.prompt('Enter primary name server IP', type=str)
+
+            if click.confirm('Does your primary require TSIG?'):
+                tsig        = click.prompt('Enter TSIG', type=str)
+                tsig_key    = click.prompt('Enter TSIG secret key', type=str)
+
+        for n in name:
+            logger.debug(f"Creating {n}")
+            
+            if primary:
+                logger.debug('Create primary zone from zone transfer')
+                rsp = client.create_primary_zone_by_axfr(account, n, primary, tsig, tsig_key)
+            else:
+                logger.debug('Create empty primary zone')
+                rsp = client.create_primary_zone(account, n)
 
     logger.debug(f"RSP: {rsp}")
 

@@ -90,11 +90,20 @@ python ultra-cli.py ls records --zone=example.com --zone=example.net
 
 # List all 'www' records in all zones in the account and export the list to a file
 python ultra-cli.py ls records --owner=www --export=all_www_records.csv
+
+# List the accounts this user belongs to (to get account info used when creating zones)
+python ultra-cli.py ls accounts
+
+# Create two new primary zones (empty)
+python ultra-cli.py create zone --account=<ACCOUNT_NAME> --type=PRIMARY --name=example.com --name=example2.com
+
+# Delete an existing zone
+python ultra-cli.py delete zone --name=example.com
 ```
 
 ## Functionality
 
-Only list (ls) functionality is available at this time.  Efforts will be made to continue development of the ultra-cli utility to include reporting, zone/record creation, update, and deletion.  Any contributions from the UltraDNS community would be greatly appreciated.
+The UltraDNS CLI supports listing (ls) zones, records, accounts, and tasks as well as creating and deleting zones.  Efforts will be made to continue development of the ultra-cli utility to include reporting, record creation, update, and deletion.  Any contributions from the UltraDNS community would be greatly appreciated.
 
 ## Contributing
 
